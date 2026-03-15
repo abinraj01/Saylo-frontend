@@ -1,0 +1,87 @@
+export const conversations = [
+  {
+    id: 1,
+    name: "Alice Smith",
+    avatar: "https://i.pravatar.cc/150?u=alice",
+    lastMessage: "See you tomorrow!",
+    timestamp: "10:45 AM",
+    unread: 2,
+    online: true,
+  },
+  {
+    id: 2,
+    name: "Bob Jones",
+    avatar: "https://i.pravatar.cc/150?u=bob",
+    lastMessage: "Thanks for the help",
+    timestamp: "Yesterday",
+    unread: 0,
+    online: false,
+  },
+  {
+    id: 3,
+    name: "Charlie Brown",
+    avatar: "https://i.pravatar.cc/150?u=charlie",
+    lastMessage: "Are we still on for the meeting?",
+    timestamp: "Yesterday",
+    unread: 1,
+    online: true,
+  },
+  {
+    id: 4,
+    name: "Diana Prince",
+    avatar: "https://i.pravatar.cc/150?u=diana",
+    lastMessage: "I sent it through email.",
+    timestamp: "Tuesday",
+    unread: 0,
+    online: false,
+  },
+  {
+    id: 5,
+    name: "Evan Wright",
+    avatar: "https://i.pravatar.cc/150?u=evan",
+    lastMessage: "Haha nice!",
+    timestamp: "Monday",
+    unread: 0,
+    online: true,
+  },
+];
+
+export const messagesData = [
+  {
+    id: 1,
+    sender: "Alice Smith",
+    text: "Hey, how are you doing?",
+    timestamp: "10:30 AM",
+    isOwn: false,
+  },
+  {
+    id: 2,
+    sender: "Me",
+    text: "I'm good! Just working on a project. You?",
+    timestamp: "10:32 AM",
+    isOwn: true,
+    status: "seen", // sent, delivered, seen
+  },
+  {
+    id: 3,
+    sender: "Alice Smith",
+    text: "Same here. We should catch up later.",
+    timestamp: "10:35 AM",
+    isOwn: false,
+  },
+  {
+    id: 4,
+    sender: "Me",
+    text: "Definitely. Let's grab coffee tomorrow.",
+    timestamp: "10:40 AM",
+    isOwn: true,
+    status: "delivered",
+  },
+  {
+    id: 5,
+    sender: "Alice Smith",
+    text: "Sounds like a plan! See you tomorrow!",
+    timestamp: "10:45 AM",
+    isOwn: false,
+  },
+];

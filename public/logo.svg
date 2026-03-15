@@ -1,0 +1,18 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="primaryGrad" x1="30" y1="70" x2="150" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4A00E0"/>
+      <stop offset="1" stop-color="#8E2DE2"/>
+    </linearGradient>
+    <linearGradient id="secondaryGrad" x1="110" y1="40" x2="230" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a8c0ff"/>
+      <stop offset="1" stop-color="#3f2b96"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Right/Back Bubble -->
+  <path d="M140 40H200C216.569 40 230 53.4315 230 70V130C230 146.569 216.569 160 200 160H185C182.239 160 180 162.239 180 165V190.586C180 193.264 176.764 194.604 174.87 192.709L151.414 169.254C149.539 167.379 146.996 166.325 144.343 166.325H140C123.431 166.325 110 152.893 110 136.325V70C110 53.4315 123.431 40 140 40Z" fill="url(#secondaryGrad)" opacity="0.95"/>
+  
+  <!-- Left/Front Bubble -->
+  <path d="M116 89.6748H60C43.4315 89.6748 30 103.106 30 119.675V179.675C30 196.243 43.4315 209.675 60 209.675H75C77.7614 209.675 80 211.913 80 214.675V240.261C80 242.939 83.236 244.278 85.1298 242.384L108.586 218.928C110.461 217.053 113.004 216 115.657 216H116C132.569 216 146 202.568 146 186V119.675C146 103.106 132.569 89.6748 116 89.6748Z" fill="url(#primaryGrad)"/>
+</svg>
