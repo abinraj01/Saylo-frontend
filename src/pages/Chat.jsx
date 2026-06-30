@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { Box, Typography, useMediaQuery, useTheme, Avatar, Divider, Button, Slide } from "@mui/material";
 
@@ -9,7 +9,7 @@ import Sidebar from "../components/Sidebar";
 import ChatHeader from "../components/ChatHeader";
 import MessageList from "../components/MessageList";
 import MessageInput from "../components/MessageInput";
-import { conversations as initialConversations, messagesData } from "../utils/mockData";
+import { useAuth } from "../context/AuthContext";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import BlockIcon from "@mui/icons-material/Block";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -19,9 +19,11 @@ import CloseIcon from "@mui/icons-material/Close";
 export default function Chat() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const [conversations, setConversations] = useState(initialConversations);
+  const [conversations, setConversations] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
-  const [messages, setMessages] = useState(messagesData);
+  const [messages, setMessages] = useState([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const { authUser } = useAuth();
   
   // Search state
   const [isSearching, setIsSearching] = useState(false);
@@ -34,22 +36,168 @@ export default function Chat() {
   // Right sidebar drawer state
   const [profileOpen, setProfileOpen] = useState(false);
 
-  // Initialize Socket.io Connection
+  // Safely persist selected chat ID natively for the Socket listener without triggering effect spam
+  const selectedChatRef = useRef(selectedChat);
   useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
+
+  // Fetch all conversations strictly from MySQL
+  const fetchConversations = async () => {
+    try {
+      const res = await fetch("http://localhost:4000/api/conversations", { credentials: "include" });
+      const data = await res.json();
+      
+      if (data.status === 1) {
+        // Format raw SQL rows safely into the frontend's expected prop shapes to protect child views!
+        const activeChats = data.data.map(c => ({
+           id: c.conversation_id, // Map the actual foreign key
+           name: c.participant_name,
+           avatar: c.participant_avatar || "https://mighty.tools/mockmind-api/content/human/5.jpg",
+           lastMessage: c.last_message || "Say hi!",
+           timestamp: c.last_message_time ? new Date(c.last_message_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
+           online: c.participant_status === 1,
+           unread: 0,
+        }));
+        setConversations(activeChats);
+      }
+    } catch (err) {
+      console.error("Failed to fetch conversations from DB:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (authUser) fetchConversations();
+  }, [authUser]);
+
+  // Fetch individual chat history bubbles immediately when clicking a specific chat thread
+  useEffect(() => {
+    setIsTyping(false); // Wipe any hanging states safely when jumping threads
+
+    if (selectedChat) {
+      const fetchMessages = async () => {
+        try {
+          const res = await fetch(`http://localhost:4000/api/conversations/${selectedChat.id}/messages`, { credentials: "include" });
+          const data = await res.json();
+          if (data.status === 1) {
+            const mappedHistory = data.data.map(m => ({
+               id: m.id,
+               text: m.text,
+               sender: m.sender_id === authUser.id ? "Me" : "Them",
+               time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+               isOwn: m.sender_id === authUser.id,
+               status: m.status
+            }));
+            setMessages(mappedHistory);
+          }
+        } catch (err) {
+          console.error("Error fetching message history:", err);
+        }
+      };
+
+      fetchMessages();
+    } else {
+      setMessages([]);
+    }
+  }, [selectedChat, authUser]);
+
+  // Master Socket Engine mapping all Real-Time network activity globally
+  useEffect(() => {
+    if (!authUser) return;
+
     socket.connect();
 
-    socket.on("receive_message", (messageData) => {
-      // If we are the sender, we already added it locally, skip it to avoid duplicates mock logic
-      if (messageData.sender !== "Me") {
-        setMessages((prev) => [...prev, messageData]);
+    const handleIncomingMessage = (messageData) => {
+      // 1. Instantly inject message bubbles into current UI if the user is literally looking at the sender 
+      if (
+        selectedChatRef.current && 
+        messageData.conversation_id === selectedChatRef.current.id && 
+        messageData.sender_id !== authUser.id
+      ) {
+        setMessages((prev) => [...prev, {
+            id: messageData.id,
+            text: messageData.text,
+            sender: "Them",
+            time: new Date(messageData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isOwn: false,
+            status: messageData.status
+        }]);
       }
+
+      // 2. Universally bind the background Sidebar stream
+      setConversations((prev) => {
+        const chatExists = prev.find(c => c.id === messageData.conversation_id);
+        
+        if (chatExists) {
+          const updatedChats = prev.map(c => {
+             if (c.id === messageData.conversation_id) {
+                // Determine if we are just passively observing else where
+                const isPassive = !selectedChatRef.current || selectedChatRef.current.id !== messageData.conversation_id;
+                
+                return {
+                   ...c,
+                   lastMessage: messageData.text,
+                   timestamp: new Date(messageData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                   // Bump up the unread notifications automatically safely
+                   unread: (isPassive && messageData.sender_id !== authUser.id) ? (c.unread || 0) + 1 : c.unread
+                };
+             }
+             return c;
+          });
+          
+          // Radically yank the active channel completely to the top of the chat stack
+          const target = updatedChats.find(c => c.id === messageData.conversation_id);
+          const others = updatedChats.filter(c => c.id !== messageData.conversation_id);
+          return [target, ...others];
+        } else {
+           // We violently received a Socket burst from an absolutely brand new foreign ID. Rehydrate universal UI!
+           fetchConversations();
+           return prev;
+        }
+      });
+    };
+
+    socket.on("receive_message", handleIncomingMessage);
+
+    socket.on("typing_start", (data) => {
+       if (selectedChatRef.current && data.conversation_id === selectedChatRef.current.id && data.sender_id !== authUser.id) {
+          setIsTyping(true);
+       }
+    });
+
+    socket.on("typing_stop", (data) => {
+       if (selectedChatRef.current && data.conversation_id === selectedChatRef.current.id && data.sender_id !== authUser.id) {
+          setIsTyping(false);
+       }
     });
 
     return () => {
-      socket.off("receive_message");
+      socket.off("receive_message", handleIncomingMessage);
+      socket.off("typing_start");
+      socket.off("typing_stop");
       socket.disconnect();
     };
-  }, []);
+  }, [authUser]);
+
+  const typingTimeoutRef = useRef(null);
+  const handleTypingActivity = () => {
+    if (!selectedChatRef.current) return;
+    
+    socket.emit("typing_start", {
+      conversation_id: selectedChatRef.current.id,
+      sender_id: authUser.id
+    });
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    
+    // Auto-disable typing indicator network blast if user is idle for exactly 2 seconds
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("typing_stop", {
+        conversation_id: selectedChatRef.current.id,
+        sender_id: authUser.id
+      });
+    }, 2000);
+  };
 
   const handleDeleteMessage = (id, type) => {
     setMessages((prev) => prev.filter((m) => m.id !== id));
@@ -80,36 +228,27 @@ export default function Chat() {
       return;
     }
 
-    const newMessage = {
-      id: Date.now(),
+    const payload = {
+      conversation_id: selectedChat.id,
+      sender_id: authUser.id,
+      text: text
+    };
+
+    const tempMessage = {
+      id: Date.now(), // Temporary ID for instant UI hydration
+      text: text,
       sender: "Me",
-      text,
-      replyTo: replyingMessage ? replyingMessage : undefined,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       isOwn: true,
       status: "sent",
     };
     
-    // Add to local UI instantly
-    setMessages((prev) => [...prev, newMessage]);
+    // Add to local UI instantly without waiting for network bounce
+    setMessages((prev) => [...prev, tempMessage]);
     setReplyingMessage(null);
 
-    // Send to backend via Socket.io
-    socket.emit("send_message", { ...newMessage, isOwn: false, sender: "Alice Smith" });
-
-    // Update last message in conversation list
-    if (selectedChat) {
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedChat.id
-            ? { ...c, lastMessage: text, timestamp: "Just now" }
-            : c
-        )
-      );
-    }
+    // Blast payload entirely up to backend via Socket.io
+    socket.emit("send_message", payload);
   };
 
   const handleSelectChat = (chat) => {
@@ -131,6 +270,7 @@ export default function Chat() {
           conversations={conversations}
           selectedChatId={selectedChat?.id}
           onSelectChat={handleSelectChat}
+          refreshChats={fetchConversations}
         />
       )}
 
@@ -153,12 +293,14 @@ export default function Chat() {
                 onReply={handleReplyMessage}
                 onEdit={handleEditMessage}
                 onDelete={handleDeleteMessage}
+                isTyping={isTyping}
               />
               <MessageInput 
                 onSendMessage={handleSendMessage} 
                 editingMessage={editingMessage}
                 replyingMessage={replyingMessage}
                 onCancelAction={() => { setEditingMessage(null); setReplyingMessage(null); }}
+                onTyping={handleTypingActivity}
               />
             </>
           ) : (

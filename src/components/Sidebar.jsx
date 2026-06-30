@@ -13,21 +13,72 @@ import {
   Menu,
   MenuItem,
   useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  CircularProgress
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import { useContext, useState } from "react";
 import { ColorModeContext } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 
-export default function Sidebar({ conversations, selectedChatId, onSelectChat }) {
+export default function Sidebar({ conversations, selectedChatId, onSelectChat, refreshChats }) {
   const theme = useTheme();
   const colorMode = useContext(ColorModeContext);
+  
+  const { logout } = useAuth();
   
   const [anchorEl, setAnchorEl] = useState(null);
   const handleMenuClick = (event) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
+
+  // New Chat Modal States
+  const [usersModalOpen, setUsersModalOpen] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  const handleLogout = async () => {
+    handleMenuClose();
+    await logout();
+  };
+
+  const handleOpenNewChat = async () => {
+    handleMenuClose();
+    setUsersModalOpen(true);
+    setLoadingUsers(true);
+    try {
+      const res = await fetch("http://localhost:4000/api/users/available", { credentials: "include" });
+      const data = await res.json();
+      if (data.status === 1) setAvailableUsers(data.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleStartChat = async (targetUserId) => {
+    try {
+      const res = await fetch("http://localhost:4000/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ targetUserId })
+      });
+      const data = await res.json();
+      if (data.status === 1) {
+        setUsersModalOpen(false);
+        refreshChats(); // Triggers the parent Chat.js to physically re-fetch the DB list
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const [searchQuery, setSearchQuery] = useState("");
   const filteredConversations = conversations.filter(c => 
@@ -92,11 +143,11 @@ export default function Sidebar({ conversations, selectedChatId, onSelectChat })
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
-            <MenuItem onClick={handleMenuClose}>New group</MenuItem>
+            <MenuItem onClick={handleOpenNewChat}>New chat</MenuItem>
             <MenuItem onClick={handleMenuClose}>Starred messages</MenuItem>
             <MenuItem onClick={handleMenuClose}>Settings</MenuItem>
             <Divider />
-            <MenuItem onClick={handleMenuClose}>Log out</MenuItem>
+            <MenuItem onClick={handleLogout} sx={{ color: "error.main" }}>Log out</MenuItem>
           </Menu>
         </Box>
       </Box>
@@ -191,6 +242,48 @@ export default function Sidebar({ conversations, selectedChatId, onSelectChat })
           </ListItem>
         ))}
       </List>
+
+      {/* Modern Dialog to start a new chat organically */}
+      <Dialog 
+        open={usersModalOpen} 
+        onClose={() => setUsersModalOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle fontWeight="800">Start new chat</DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          {loadingUsers ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <List sx={{ p: 0 }}>
+              {availableUsers.map((u) => (
+                <ListItem 
+                  key={u.id} 
+                  button 
+                  onClick={() => handleStartChat(u.id)}
+                  sx={{ py: 1.5, '&:hover': { bgcolor: theme.palette.action.hover } }}
+                >
+                  <ListItemAvatar>
+                    <Avatar src={u.profile_pic || ""} alt={u.name} />
+                  </ListItemAvatar>
+                  <ListItemText 
+                    primary={<Typography fontWeight="600">{u.name}</Typography>} 
+                    secondary={u.email} 
+                  />
+                  <PersonAddIcon sx={{ color: "primary.main", mr: 1, opacity: 0.8 }} />
+                </ListItem>
+              ))}
+              {availableUsers.length === 0 && (
+                 <Box sx={{ py: 4, textAlign: 'center' }}>
+                    <Typography color="text.secondary">No other users found on the network.</Typography>
+                 </Box>
+              )}
+            </List>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

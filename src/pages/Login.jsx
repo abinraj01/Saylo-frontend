@@ -1,19 +1,62 @@
-import { Box, Button, TextField, Typography, Link as MuiLink, InputAdornment, IconButton, useTheme, Checkbox, FormControlLabel, Divider } from "@mui/material";
-import { Link, useNavigate } from "react-router-dom";
+import { Box, Button, TextField, Typography, Link as MuiLink, InputAdornment, IconButton, useTheme, Checkbox, FormControlLabel, Divider, Alert, CircularProgress } from "@mui/material";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState } from "react";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import GoogleIcon from "@mui/icons-material/Google";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
   const theme = useTheme();
+  const { checkAuth } = useAuth();
+  
+  const location = useLocation();
+  const successMessage = location.state?.message || "";
+  
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    navigate("/");
-  };
+  const formik = useFormik({
+    initialValues: {
+      email: "",
+      password: "",
+    },
+    validationSchema: Yup.object({
+      email: Yup.string()
+        .email("Please enter a valid email address")
+        .required("Email is required"),
+      password: Yup.string()
+        .required("Password is required"),
+    }),
+    onSubmit: async (values, { setSubmitting }) => {
+      setError("");
+      try {
+        const response = await fetch("http://localhost:4000/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(values),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || data.error || "Failed to log in");
+        }
+
+        // Login successful! Trigger the global auth re-fetch. 
+        // AuthRoute will naturally bounce us to "/" since authUser becomes populated!
+        await checkAuth();
+      } catch (err) {
+        setError(err.message || "Invalid credentials. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+  });
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
@@ -88,15 +131,36 @@ export default function Login() {
             </Typography>
           </Box>
 
-          <Box component="form" onSubmit={handleLogin} sx={{ width: "100%" }}>
+          {/* Display successful registration message if present */}
+          {successMessage && !error && (
+            <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }}>
+              {successMessage}
+            </Alert>
+          )}
+
+          {/* Display login error if present */}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Box component="form" onSubmit={formik.handleSubmit} sx={{ width: "100%" }}>
             
             <Typography variant="body2" fontWeight="600" mb={1}>Email</Typography>
             <TextField 
               fullWidth 
+              id="email"
+              name="email"
               placeholder="Enter your email" 
               variant="outlined" 
-              required 
               type="email"
+              value={formik.values.email}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              disabled={formik.isSubmitting}
+              error={formik.touched.email && Boolean(formik.errors.email)}
+              helperText={formik.touched.email && formik.errors.email}
               InputProps={{
                 sx: { borderRadius: 2, bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.03)" : "#f9fafb", '& fieldset': { borderColor: theme.palette.divider } }
               }}
@@ -106,10 +170,17 @@ export default function Login() {
             <Typography variant="body2" fontWeight="600" mb={1}>Password</Typography>
             <TextField 
               fullWidth 
+              id="password"
+              name="password"
               placeholder="••••••••" 
               type={showPassword ? "text" : "password"} 
               variant="outlined" 
-              required 
+              value={formik.values.password}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              disabled={formik.isSubmitting}
+              error={formik.touched.password && Boolean(formik.errors.password)}
+              helperText={formik.touched.password && formik.errors.password}
               InputProps={{
                 sx: { borderRadius: 2, bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.03)" : "#f9fafb", '& fieldset': { borderColor: theme.palette.divider } },
                 endAdornment: (
@@ -139,6 +210,7 @@ export default function Login() {
               variant="contained" 
               size="large" 
               disableElevation
+              disabled={formik.isSubmitting}
               sx={{ 
                 py: 1.5, 
                 borderRadius: 2.5, 
@@ -154,7 +226,7 @@ export default function Login() {
                 }
               }}
             >
-              Sign in
+              {formik.isSubmitting ? <CircularProgress size={24} color="inherit" /> : "Sign in"}
             </Button>
 
             {/* <Button 

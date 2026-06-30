@@ -10,7 +10,7 @@ import VideocamIcon from "@mui/icons-material/Videocam";
 import CloseIcon from "@mui/icons-material/Close";
 import EmojiPicker from "emoji-picker-react";
 
-export default function MessageInput({ onSendMessage, editingMessage, replyingMessage, onCancelAction }) {
+export default function MessageInput({ onSendMessage, editingMessage, replyingMessage, onCancelAction, onTyping }) {
   const theme = useTheme();
   const [text, setText] = useState("");
   const [emojiAnchor, setEmojiAnchor] = useState(null);
@@ -129,7 +129,10 @@ export default function MessageInput({ onSendMessage, editingMessage, replyingMe
           multiline
           maxRows={4}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+             setText(e.target.value);
+             if (onTyping) onTyping();
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Type a message"
           sx={{
