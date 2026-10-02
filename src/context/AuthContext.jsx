@@ -1,6 +1,7 @@
 import { createContext, useState, useEffect, useContext } from "react";
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
+import { REST_API } from "../config/defaultValues";
 
 export const AuthContext = createContext();
 
@@ -15,7 +16,7 @@ export const AuthProvider = ({ children }) => {
   // Verifies session actively by pinging the backend authMe hook
   const checkAuth = async () => {
     try {
-      const response = await fetch("http://localhost:4000/auth/me", {
+      const response = await fetch(`${REST_API}/auth/me`, {
         credentials: "include", // Very important! Ships the HTTPOnly cookie automatically.
       });
       const data = await response.json();
@@ -34,7 +35,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await fetch("http://localhost:4000/logout", {
+      await fetch(`${REST_API}/logout`, {
         method: "POST",
         credentials: "include" // Send cookie back to violently invalidate it
       });

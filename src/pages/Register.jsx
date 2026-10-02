@@ -6,6 +6,7 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import GoogleIcon from "@mui/icons-material/Google";
 import { useFormik } from "formik";
 import * as Yup from "yup";
+import { REST_API } from "../config/defaultValues";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ export default function Register() {
     onSubmit: async (values, { setSubmitting }) => {
       setError("");
       try {
-        const response = await fetch("http://localhost:4000/signup", {
+        const response = await fetch(`${REST_API}/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(values),

@@ -26,6 +26,7 @@ import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import { useContext, useState } from "react";
 import { ColorModeContext } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { REST_API } from "../config/defaultValues";
 
 export default function Sidebar({ conversations, selectedChatId, onSelectChat, refreshChats }) {
   const theme = useTheme();
@@ -52,8 +53,8 @@ export default function Sidebar({ conversations, selectedChatId, onSelectChat, r
     setUsersModalOpen(true);
     setLoadingUsers(true);
     try {
-      const res = await fetch("http://localhost:4000/api/users/available", { credentials: "include" });
-      const data = await res.json();
+      const res = await fetch(`${REST_API}/api/users/available`, { credentials: "include" });
+      const data = await res.json(); 
       if (data.status === 1) setAvailableUsers(data.data);
     } catch (err) {
       console.error(err);
@@ -64,7 +65,7 @@ export default function Sidebar({ conversations, selectedChatId, onSelectChat, r
 
   const handleStartChat = async (targetUserId) => {
     try {
-      const res = await fetch("http://localhost:4000/api/conversations", {
+      const res = await fetch(`${REST_API}/api/conversations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

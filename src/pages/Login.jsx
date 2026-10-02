@@ -7,6 +7,7 @@ import GoogleIcon from "@mui/icons-material/Google";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useAuth } from "../context/AuthContext";
+import { REST_API } from "../config/defaultValues";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -34,7 +35,7 @@ export default function Login() {
     onSubmit: async (values, { setSubmitting }) => {
       setError("");
       try {
-        const response = await fetch("http://localhost:4000/login", {
+        const response = await fetch(`${REST_API}/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",

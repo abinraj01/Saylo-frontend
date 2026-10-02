@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { Box, Typography, useMediaQuery, useTheme, Avatar, Divider, Button, Slide } from "@mui/material";
 
-const socket = io("http://localhost:4000", {
+const socket = io(SOCKET_URL, {
   autoConnect: false // Connect only when component mounts
 });
 import Sidebar from "../components/Sidebar";
@@ -15,6 +15,7 @@ import BlockIcon from "@mui/icons-material/Block";
 import DeleteIcon from "@mui/icons-material/Delete";
 import StarIcon from "@mui/icons-material/Star";
 import CloseIcon from "@mui/icons-material/Close";
+import { REST_API, SOCKET_URL } from "../config/defaultValues";
 
 export default function Chat() {
   const theme = useTheme();
@@ -45,7 +46,7 @@ export default function Chat() {
   // Fetch all conversations strictly from MySQL
   const fetchConversations = async () => {
     try {
-      const res = await fetch("http://localhost:4000/api/conversations", { credentials: "include" });
+      const res = await fetch(`${REST_API}/api/conversations`, { credentials: "include" });
       const data = await res.json();
       
       if (data.status === 1) {
@@ -77,7 +78,7 @@ export default function Chat() {
     if (selectedChat) {
       const fetchMessages = async () => {
         try {
-          const res = await fetch(`http://localhost:4000/api/conversations/${selectedChat.id}/messages`, { credentials: "include" });
+          const res = await fetch(`${REST_API}/api/conversations/${selectedChat.id}/messages`, { credentials: "include" });
           const data = await res.json();
           if (data.status === 1) {
             const mappedHistory = data.data.map(m => ({
@@ -86,7 +87,8 @@ export default function Chat() {
                sender: m.sender_id === authUser.id ? "Me" : "Them",
                time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                isOwn: m.sender_id === authUser.id,
-               status: m.status
+               status: m.status,
+               isEdited: m.is_edited || false
             }));
             setMessages(mappedHistory);
           }
@@ -120,7 +122,8 @@ export default function Chat() {
             sender: "Them",
             time: new Date(messageData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             isOwn: false,
-            status: messageData.status
+            status: messageData.status,
+            isEdited: false
         }]);
       }
 
@@ -157,7 +160,27 @@ export default function Chat() {
       });
     };
 
+    const handleMessageEdited = (editedData) => {
+      if (
+        selectedChatRef.current &&
+        editedData.conversation_id === selectedChatRef.current.id
+      ) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === editedData.id ? { ...m, text: editedData.text, isEdited: true } : m
+          )
+        );
+      }
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === editedData.conversation_id ? { ...c, lastMessage: editedData.text } : c
+        )
+      );
+    };
+
     socket.on("receive_message", handleIncomingMessage);
+    socket.on("message_edited", handleMessageEdited);
 
     socket.on("typing_start", (data) => {
        if (selectedChatRef.current && data.conversation_id === selectedChatRef.current.id && data.sender_id !== authUser.id) {
@@ -173,6 +196,7 @@ export default function Chat() {
 
     return () => {
       socket.off("receive_message", handleIncomingMessage);
+      socket.off("message_edited", handleMessageEdited);
       socket.off("typing_start");
       socket.off("typing_stop");
       socket.disconnect();
@@ -215,7 +239,9 @@ export default function Chat() {
 
   const handleSendMessage = (text) => {
     if (editingMessage) {
-      setMessages((prev) => prev.map((m) => m.id === editingMessage.id ? { ...m, text, isEdited: true } : m));
+      const msgId = editingMessage.id;
+
+      setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, text, isEdited: true } : m));
       
       if (selectedChat) {
         setConversations((prev) =>
@@ -224,6 +250,23 @@ export default function Chat() {
           )
         );
       }
+
+      // Socket real-time broadcast to all connected clients
+      socket.emit("edit_message", {
+        message_id: msgId,
+        conversation_id: selectedChat.id,
+        sender_id: authUser.id,
+        text: text
+      });
+
+      // REST API persistence fallback
+      fetch(`${REST_API}/api/messages/${msgId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text })
+      }).catch(err => console.error("Error editing message via API:", err));
+
       setEditingMessage(null);
       return;
     }
